@@ -1,0 +1,120 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`report > renders a stable Markdown report (golden) 1`] = `
+"# TokenTrim analysis — golden
+
+1 session(s), 2026-10-01 → 2026-10-01. Generated 2026-11-01 12:00 UTC.
+
+Costs are in **input-token equivalents (ITE)**: one uncached input token = 1, cache read = 0.1, cache write = 1.25, output = 5. They work for any model; set \`pricing.usd_per_mtok_input\` to also see dollars.
+
+## Headline
+
+| Metric | Value |
+|---|---:|
+| Total cost | 887K ITE |
+| …of which subagents | 0 ITE (0.0%) |
+| API requests (main chain) | 49 |
+| Prompts you typed | 1 |
+| Cost per prompt | 887K ITE |
+| Cache hit ratio (input side) | 96.4% |
+| Compactions | 1 |
+| Upper-bound saving from one well-timed clear per segment | 154K ITE (17.4%) |
+| What the planned guards would have saved | 286K ITE (32.2%) |
+
+## Where the cost comes from
+
+By billing component:
+
+| Component | Tokens | Cost (ITE) | Share |
+|---|---:|---:|---:|
+| Uncached input | 147 | 147 | <0.1% |
+| Cache writes | 213K | 266K | 30.0% |
+| Cache reads | 5.7M | 571K | 64.4% |
+| Output | 9.8K | 49.0K | 5.5% |
+
+By what is sitting in context (main chain). Each request's input cost is split across the content it re-sent; item sizes are estimated from characters and reconciled to the real usage, with the remainder shown as "unattributed".
+
+| Category | Cost (ITE) | Share | Avg tokens in context |
+|---|---:|---:|---:|
+| unattributed (estimate gap) | 361K | 40.7% | 55.3K |
+| fixed overhead (system, tools, memory) | 236K | 26.6% | 32.0K |
+| tool: Read | 195K | 22.0% | 27.1K |
+| output (generation) | 49.0K | 5.5% | — |
+| assistant thinking in context (estimated) | 25.1K | 2.8% | 3.7K |
+| tool: Bash | 19.1K | 2.2% | 2.7K |
+| compaction summaries | 575 | <0.1% | 88 |
+| tool call inputs (edits, writes, commands) | 417 | <0.1% | 58 |
+| assistant text in context | 245 | <0.1% | 36 |
+| user prompts | 23 | <0.1% | 3 |
+
+## Sessions
+
+| Session | Target | Dates | Requests | Peak context | Cost (ITE) | Cache hit | Compactions | Context over time |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Synthetic session | FluxChunk | 2026-10-01 → 2026-10-01 | 49 | 238K / 1.0M | 887K | 96.4% | 1 | \`▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▁▁▁\` |
+
+## Clear vs. continue
+
+Each request re-sends the whole context. Clearing costs a one-time rebuild (keynotes ≈ 1.5K plus recently used files) and saves cache reads on every later request. The table lists, per session segment (between compactions), the **first** request where clearing would have paid for itself within 4 requests, and what one clear there would have saved by the end of that segment. It is an upper bound: it ignores whether that moment was a good task boundary.
+
+| Session | At request | Context | Fresh start | Pays off in | Requests after | Saving (ITE) |
+|---|---:|---:|---:|---:|---:|---:|
+| Synthetic session | #13 of 49 | 88.0K | 33.5K | 1.7 req | 30 | 154K |
+
+
+## Prompt cache
+
+| Metric | Value |
+|---|---:|
+| Idle gaps over 5 min between requests | 0 |
+| Idle gaps over 60 min | 0 |
+| Requests that re-wrote ≥ 50% of a ≥ 20K context | 0 |
+| …of those after a gap under 5 min (cache broken by something else) | 0 |
+| Extra cost of those rebuilds vs. cache reads | 0 ITE (0.0%) |
+| Model switches mid-session | 0 |
+
+## Biggest tool results
+
+Ranked by lifetime cost: the cache write when the result arrived plus a cache read on every later request that carried it.
+
+| Tool | What | Tokens | Carried for | Lifetime cost (ITE) |
+|---|---:|---:|---:|---:|
+| Read | C:\\Users\\dev\\Projects\\FluxChunk\\src\\parser.ts | 11.7K | 43 req | 63.6K |
+| Read | C:\\Users\\dev\\Projects\\FluxChunk\\src\\parser.ts | 11.7K | 42 req | 62.5K |
+| Read | C:\\Users\\dev\\Projects\\FluxChunk\\src\\parser.ts | 11.7K | 41 req | 61.3K |
+| Bash | npm install | 3.5K | 40 req | 17.8K |
+
+## Files read more than once
+
+"Duplicate" means the same range came back with identical content, in the same segment, so the earlier copy was still in context.
+
+| File | Reads | Duplicates | Duplicate tokens | Duplicate cost (ITE) |
+|---|---:|---:|---:|---:|
+| C:\\Users\\dev\\Projects\\FluxChunk\\src\\parser.ts | 3 | 2 | 23.4K | 124K |
+
+## Tools by lifetime cost
+
+| Tool | Calls | Result tokens | Lifetime cost (ITE) | Share |
+|---|---:|---:|---:|---:|
+| Read | 3 | 35.0K | 187K | 21.1% |
+| Bash | 1 | 3.5K | 17.8K | 2.0% |
+
+## What the planned guards would have caught
+
+Simulated on these transcripts with the default thresholds. Guards are not active yet (Phase 3).
+
+| Guard | Hits | Tokens avoided | Cost avoided (ITE) | Share |
+|---|---:|---:|---:|---:|
+| Duplicate read | 2 | 23.4K | 124K | 14.0% |
+| Large file read without a range | 3 | 27.2K | 146K | 16.4% |
+| Noisy command | 1 | 3.2K | 16.3K | 1.8% |
+
+Noisy commands by pattern: install-verbose ×1.
+
+## Notes
+
+- Malformed transcript lines skipped: 0.
+- Token sizes of individual items are estimates (≈3.7 characters per token); request totals come straight from the recorded usage.
+- File contents never appear in this report. Use --redact to hash paths and commands.
+"
+`;

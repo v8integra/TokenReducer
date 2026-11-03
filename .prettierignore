@@ -1,0 +1,7 @@
+node_modules
+dist
+.tokentrim
+smoke-out
+fixtures
+package-lock.json
+TOKENTRIM_PLAN.md

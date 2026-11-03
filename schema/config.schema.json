@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TokenTrim configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "modules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "meter": { "type": "boolean", "default": true },
+        "checkpoint": { "type": "boolean", "default": true },
+        "advisor": { "type": "boolean", "default": true },
+        "guards": { "type": "boolean", "default": true },
+        "nav": { "type": "boolean", "default": true },
+        "audit": { "type": "boolean", "default": true }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": { "type": "number", "minimum": 0, "default": 1500 },
+        "inject_on_startup": { "type": "boolean", "default": false }
+      }
+    },
+    "advisor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_breakeven_turns": { "type": "number", "minimum": 0, "default": 4 },
+        "tell_claude": { "type": "boolean", "default": true },
+        "desktop_notify": { "type": "boolean", "default": false }
+      }
+    },
+    "idle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cache_ttl_minutes": { "type": "number", "minimum": 0, "default": 5 },
+        "min_context": { "type": "number", "minimum": 0, "default": 40000 },
+        "block_once": { "type": "boolean", "default": false }
+      }
+    },
+    "guards": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duplicate_read": { "type": "boolean", "default": true },
+        "large_file_lines": { "type": "number", "minimum": 0, "default": 800 },
+        "noisy_commands": { "type": "boolean", "default": true },
+        "noisy_patterns_extra": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "r_read": { "type": "number", "minimum": 0, "default": 0.1 },
+        "r_write": { "type": "number", "minimum": 0, "default": 1.25 },
+        "r_out": { "type": "number", "minimum": 0, "default": 5 },
+        "usd_per_mtok_input": { "type": ["number", "null"], "default": null }
+      }
+    }
+  }
+}

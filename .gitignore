@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.tokentrim/
+coverage/
+*.log
+smoke-out/

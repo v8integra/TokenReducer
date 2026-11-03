@@ -1,0 +1,10 @@
+{
+  "name": "@tokentrim/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TokenTrim core: transcript parsing, accounting, break-even math, pricing, config. No Claude Code adapter code.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

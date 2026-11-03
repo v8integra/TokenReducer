@@ -1,0 +1,13 @@
+{
+  "name": "@tokentrim/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "tokentrim command line: analyze (more commands in later phases).",
+  "bin": {
+    "tokentrim": "./dist/tokentrim.js"
+  },
+  "dependencies": {
+    "@tokentrim/core": "0.0.0"
+  }
+}
