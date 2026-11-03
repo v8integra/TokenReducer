@@ -1,0 +1,9 @@
+{
+  "name": "tokentrim",
+  "displayName": "TokenTrim",
+  "version": "0.0.0",
+  "description": "Measures where tokens go in a session and tells you when clearing or compacting is cheaper than continuing.",
+  "author": { "name": "TokenTrim contributors" },
+  "license": "MIT",
+  "keywords": ["tokens", "cost", "context", "cache"]
+}

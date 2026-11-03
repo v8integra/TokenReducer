@@ -7,15 +7,21 @@ import {
   listTranscripts,
   loadConfig,
   parseTranscriptFile,
+  simulateSession,
+  STANDARD_POLICIES,
   transcriptDirFor,
   type AnalyzeOptions,
   type SessionAnalysis,
+  type SimulationOptions,
 } from '@tokentrim/core';
 import type { AnalyzeArgs } from './args.js';
 import { aggregate } from './report/aggregate.js';
 import { Redactor, tok, pct } from './report/format.js';
 import { renderHtml } from './report/html.js';
 import { renderMarkdown, type ReportContext } from './report/markdown.js';
+
+/** Median size of the 16 real compaction summaries seen while building this (10–27K). */
+const COMPACT_SUMMARY_TOKENS = 18_000;
 
 export interface Io {
   log: (s: string) => void;
@@ -62,11 +68,21 @@ export async function runAnalyze(args: AnalyzeArgs, io: Io): Promise<number> {
     noisyExtra: config.guards.noisy_patterns_extra,
   };
 
+  const simOpts: SimulationOptions = {
+    ratios: opts.ratios,
+    keynotesTokens: opts.keynotesTokens,
+    summaryTokens: COMPACT_SUMMARY_TOKENS,
+    minContext: config.idle.min_context,
+  };
+
   let analyses: SessionAnalysis[] = [];
   for (const [i, file] of files.entries()) {
     io.progress(`[${i + 1}/${files.length}] ${path.basename(file)}`);
     try {
-      const a = analyzeSession(await parseTranscriptFile(file), opts);
+      const parsed = await parseTranscriptFile(file);
+      const a = analyzeSession(parsed, opts);
+      if (args.simulate)
+        a.simulation = simulateSession(parsed, a.baseOverhead, STANDARD_POLICIES, simOpts, opts);
       if (a.requests > 0) analyses.push(a);
     } catch (e) {
       io.progress(`  skipped: ${(e as Error).message}`);

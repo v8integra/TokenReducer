@@ -4,7 +4,15 @@ export type ModuleName = (typeof MODULES)[number];
 export interface TokenTrimConfig {
   modules: Record<ModuleName, boolean>;
   checkpoint: { max_tokens: number; inject_on_startup: boolean };
-  advisor: { max_breakeven_turns: number; tell_claude: boolean; desktop_notify: boolean };
+  advisor: {
+    max_breakeven_turns: number;
+    /** Suggest /compact once the context passes this many tokens (docs/DECISIONS.md D12). */
+    context_budget: number;
+    /** Which task-boundary signals count: 'strong' ones only, or also any closed-out turn. */
+    boundary_signals: 'strong' | 'any';
+    tell_claude: boolean;
+    desktop_notify: boolean;
+  };
   idle: { cache_ttl_minutes: number; min_context: number; block_once: boolean };
   guards: {
     duplicate_read: boolean;
@@ -26,7 +34,13 @@ export function defaultConfig(): TokenTrimConfig {
       audit: true,
     },
     checkpoint: { max_tokens: 1500, inject_on_startup: false },
-    advisor: { max_breakeven_turns: 4, tell_claude: true, desktop_notify: false },
+    advisor: {
+      max_breakeven_turns: 4,
+      context_budget: 200_000,
+      boundary_signals: 'strong',
+      tell_claude: true,
+      desktop_notify: false,
+    },
     idle: { cache_ttl_minutes: 5, min_context: 40000, block_once: false },
     guards: {
       duplicate_read: true,

@@ -186,3 +186,20 @@ describe('runAnalyze', () => {
     expect(logs[0]).toContain('No transcripts found');
   });
 });
+
+describe('runAnalyze --simulate', () => {
+  it('adds the policy table, with the no-policy row matching actual cost', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'tt-sim-'));
+    const out = path.join(dir, 'out');
+    await writeFile(path.join(dir, 's1.jsonl'), sampleSession().text());
+    const code = await runAnalyze(
+      { ...parseAnalyzeArgs(['--transcripts', dir, '--out', out, '--simulate']), project: dir },
+      { log: () => {}, progress: () => {} },
+    );
+    expect(code).toBe(0);
+    const md = await readFile(path.join(out, 'report.md'), 'utf8');
+    expect(md).toContain('## Policy simulation');
+    expect(md).toMatch(/\| actual \(no policy\) \| [^|]+ \| 0\.0% \|/);
+    expect(md).toContain('combined: strong + idle + 200K');
+  });
+});

@@ -75,6 +75,8 @@ export class TranscriptParser {
     }
     if (typeof o.cwd === 'string' && !this.s.cwd) this.s.cwd = o.cwd;
     if (typeof o.version === 'string') this.s.version = o.version;
+    if (typeof o.gitBranch === 'string' && o.gitBranch && o.gitBranch !== 'HEAD')
+      this.s.gitBranch = o.gitBranch;
 
     switch (o.type) {
       case 'custom-title':
@@ -208,6 +210,9 @@ export class TranscriptParser {
           hash: contentHash(text),
           timestamp: ts,
         };
+        // Facts list unresolved errors, so keep a short preview of error output (never of normal output).
+        if (result.isError)
+          result.errorPreview = text.replace(/\s+/g, ' ').trim().slice(0, ERROR_PREVIEW_CHARS);
         call.result = result;
         call.resultAddedBefore = sidechain ? -1 : addedBefore;
       } else if (c.type === 'text' && typeof c.text === 'string') {
@@ -273,7 +278,40 @@ function summarizeInput(input: unknown): ToolInputSummary {
   if (typeof input.command === 'string') out.command = input.command;
   if (typeof input.pattern === 'string') out.pattern = input.pattern;
   if (typeof input.url === 'string') out.url = input.url;
+  // To-do tools: TodoWrite `todos`, the desktop app's update_plan `items`, TaskCreate `tasks` (sometimes a JSON string).
+  const list = todoList(input.todos ?? input.items ?? input.tasks);
+  if (list) {
+    out.todosDone = list.length > 0 && list.every((t) => t.status === 'completed');
+    out.todos = list.slice(0, MAX_TODOS);
+  }
+  if (typeof input.taskId === 'string') out.taskId = input.taskId;
+  if (typeof input.status === 'string') out.status = input.status;
   return out;
+}
+
+const MAX_TODOS = 20;
+const TODO_CHARS = 120;
+const ERROR_PREVIEW_CHARS = 200;
+
+function todoList(v: unknown): { content: string; status: string }[] | undefined {
+  let arr = v;
+  if (typeof arr === 'string') {
+    try {
+      arr = JSON.parse(arr);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!Array.isArray(arr)) return undefined;
+  return arr.map((t) => {
+    const o = isObj(t) ? t : {};
+    const text = o.content ?? o.subject ?? o.description ?? '';
+    return {
+      content:
+        typeof text === 'string' ? text.replace(/\s+/g, ' ').trim().slice(0, TODO_CHARS) : '',
+      status: typeof o.status === 'string' ? o.status : 'pending',
+    };
+  });
 }
 
 function blockText(content: unknown): { chars: number; text: string } {

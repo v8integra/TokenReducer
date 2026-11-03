@@ -73,3 +73,4 @@ async function readJson(file: string, warnings: string[]): Promise<unknown> {
     return undefined;
   }
 }
+export { setModule, isModuleName, ConfigWriteError } from './write.js';

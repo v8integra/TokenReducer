@@ -28,6 +28,7 @@ Useful options:
 | `--session <id>`                   | One session                                                                                                                  |
 | `--redact`                         | Hash paths, commands and titles before sharing a report                                                                      |
 | `--json`                           | Also write the raw analysis                                                                                                  |
+| `--simulate`                       | Estimate what clear/compact policies would have saved on these sessions                                                      |
 
 ## What the report shows
 
@@ -40,6 +41,36 @@ Useful options:
 - **Prompt cache:** idle gaps, cache rebuilds, and rebuilds that happened without an idle gap.
 - **Biggest tool results** ranked by lifetime cost, **files read more than once**, and what the planned guards
   would have caught.
+
+## Try the plugin (development build)
+
+The plugin keeps live per-session metrics, shows them as a status line meter, and keeps keynotes that survive `/clear`. The advisor is next.
+
+```bash
+npm run build
+claude plugin marketplace add ./
+claude plugin install tokentrim@tokentrim-dev
+```
+
+Run those from this folder, then start a new session (terminal or desktop app). The local marketplace loads the
+plugin in place, so after code changes `npm run build` and a new session are enough. For a one-off terminal session
+without installing, `claude --plugin-dir ./packages/plugin-claude-code` also works; the desktop app needs the
+install.
+
+Run `/tokentrim:setup-statusline` to add the meter to your status line (it shows the change and asks first;
+your current status line keeps running above it). It looks like:
+
+```
+● 142K ctx · next req ≈14K · clear pays off in 3 req · cache 38m · $4.10 → good moment to /clear
+```
+
+Before a `/clear`, run `/tokentrim:checkpoint`: Claude writes a short Summary (decisions, current task, next steps)
+into `.tokentrim/keynotes/`, next to Facts TokenTrim collects automatically (files changed, recent test/build
+results, open errors, to-dos). The new session starts with them, capped at 1,500 tokens.
+
+`/tokentrim:tokentrim status` shows which modules are on, and `/tokentrim:tokentrim off <module>` turns
+one off for the current project. Metrics land in `<project>/.tokentrim/state/`; add `.tokentrim/` to your
+`.gitignore`. Hooks fail open: if anything goes wrong they exit quietly and log to `~/.tokentrim/logs/`.
 
 ## Development
 

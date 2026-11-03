@@ -44,3 +44,10 @@ Most sessions ran Opus with a 1 M context window and grew to ~965 K before auto-
 4. **One clear per segment is a floor, not the ceiling.** The 6.7 % assumes a single clear per segment.
    Clearing at every boundary would save more. Phase 2's advisor should be measured against that with the
    benchmark, not with this simulation.
+
+## Policy simulation (Phase 2a, 2026-11-03)
+
+`tokentrim analyze --simulate` on the 13-project set: clearing at strong task boundaries alone would save ~32% (16
+actions per 100 prompts). Combined with idle clears and a 200K compaction budget it would save ~58% and cut the
+average context from 463K to 143K. Details and the chosen defaults are in `docs/DECISIONS.md` (D12). These are
+upper estimates.

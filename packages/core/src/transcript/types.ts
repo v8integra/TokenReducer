@@ -26,6 +26,13 @@ export interface ToolInputSummary {
   command?: string;
   pattern?: string;
   url?: string;
+  /** For to-do tools that send a whole list: true when every item is completed. */
+  todosDone?: boolean;
+  /** For TaskUpdate-style tools that change one item. */
+  taskId?: string;
+  status?: string;
+  /** The whole list, for to-do tools that send one (capped). */
+  todos?: { content: string; status: string }[];
 }
 
 export interface ToolResult {
@@ -34,6 +41,8 @@ export interface ToolResult {
   isError: boolean;
   hash: string;
   timestamp: number;
+  /** Start of the output, kept only for error results. */
+  errorPreview?: string;
 }
 
 export interface ToolCall {
@@ -75,6 +84,7 @@ export interface ParsedSession {
   title?: string;
   cwd?: string;
   version?: string;
+  gitBranch?: string;
   firstTimestamp: number;
   lastTimestamp: number;
   /** Main-chain requests, in order. */

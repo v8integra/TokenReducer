@@ -11,6 +11,7 @@ import {
 import type { ApiRequest, Compaction, ParsedSession, ToolCall } from '../transcript/types.js';
 import { pathKey } from '../util/paths.js';
 import { estimateTokens } from '../util/tokens.js';
+import type { PolicyResult } from '../simulate/index.js';
 import { inferTargetProject } from './target.js';
 
 export interface AnalyzeOptions {
@@ -133,6 +134,8 @@ export interface SessionAnalysis {
   };
   modelSwitches: number;
   malformedLines: number;
+  /** Present when the caller ran the policy simulation (`analyze --simulate`). */
+  simulation?: PolicyResult[];
 }
 
 const OUTPUT = 'output (generation)';
@@ -460,7 +463,10 @@ export function analyzeSession(
 }
 
 /** R in the break-even formula: tokens of distinct files read or edited in the last M requests, capped. */
-function recentFileTokens(s: ParsedSession, opts: AnalyzeOptions) {
+export function recentFileTokens(
+  s: ParsedSession,
+  opts: Pick<AnalyzeOptions, 'reReadWindow' | 'reReadCap'>,
+) {
   const touches: { i: number; key: string; tokens: number }[] = [];
   const lastReadTokens = new Map<string, number>();
   for (const t of s.toolCalls) {

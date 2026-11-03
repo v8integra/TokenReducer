@@ -1,0 +1,10 @@
+{
+  "name": "@tokentrim/plugin-claude-code",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TokenTrim's Claude Code adapter: hooks, skills and packaging. Thin wrappers over @tokentrim/core.",
+  "dependencies": {
+    "@tokentrim/core": "0.0.0"
+  }
+}

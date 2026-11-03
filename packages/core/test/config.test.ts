@@ -77,7 +77,7 @@ describe('loadConfig', () => {
     await mkdir(path.join(home, '.tokentrim'));
     await writeFile(
       path.join(home, '.tokentrim', 'config.json'),
-      '﻿{"advisor":{"max_breakeven_turns":6},"idle":{"min_context":1}}',
+      '\uFEFF{"advisor":{"max_breakeven_turns":6},"idle":{"min_context":1}}',
     );
     await writeFile(path.join(project, 'tokentrim.config.json'), '{"idle":{"min_context":2}}');
     const r = await loadConfig({ homeDir: home, projectDir: project, env: {} });

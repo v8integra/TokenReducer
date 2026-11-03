@@ -289,6 +289,8 @@ export function renderMarkdown(a: Aggregate, ctx: ReportContext): string {
   if (patterns.length)
     line(`Noisy commands by pattern: ${patterns.map(([k, v]) => `${k} ×${v}`).join(', ')}.\n`);
 
+  if (a.simulation.length) renderSimulation(a, line, table);
+
   line('## Notes');
   line();
   line(`- Malformed transcript lines skipped: ${a.malformedLines}.`);
@@ -303,4 +305,42 @@ export function renderMarkdown(a: Aggregate, ctx: ReportContext): string {
   );
   line();
   return L.join('\n');
+}
+
+function renderSimulation(
+  a: Aggregate,
+  line: (s?: string) => void,
+  table: (head: string[], rows: (string | number)[][]) => void,
+): void {
+  line('## Policy simulation');
+  line();
+  line(
+    'Each session replayed under a context policy: the same work, but the context restarts small after a clear or compaction and grows the same way afterwards. Actions only happen between turns. Optimistic about lost context (only recent files are assumed re-read); pessimistic about compaction (simulated ones are charged, avoided real ones are not credited).',
+  );
+  line();
+  const actual = a.simulation[0]?.actualCost ?? 0;
+  table(
+    [
+      'Policy',
+      'Cost (ITE)',
+      'Saving',
+      'Clears',
+      'Compacts',
+      'Idle clears',
+      'Actions per 100 prompts',
+      'Avg context',
+    ],
+    a.simulation.map((r) => [
+      r.policy,
+      tok(r.cost),
+      pct(actual - r.cost, actual),
+      r.clears,
+      r.compacts,
+      r.idleClears,
+      a.humanPrompts
+        ? ((100 * (r.clears + r.compacts + r.idleClears)) / a.humanPrompts).toFixed(0)
+        : '—',
+      tok(r.avgContext),
+    ]),
+  );
 }

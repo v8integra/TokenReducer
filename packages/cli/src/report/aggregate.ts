@@ -3,6 +3,7 @@ import {
   type BigToolResult,
   type CategoryCost,
   type GuardSim,
+  type PolicyResult,
   type RepeatedRead,
   type SessionAnalysis,
   type Usage,
@@ -41,6 +42,7 @@ export interface Aggregate {
   gapsOverHour: number;
   modelSwitches: number;
   malformedLines: number;
+  simulation: PolicyResult[];
 }
 
 const ZERO_COST: WeightedCost = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0, total: 0 };
@@ -88,7 +90,9 @@ export function aggregate(sessions: SessionAnalysis[], ttlMinutes: number): Aggr
     gapsOverHour: 0,
     modelSwitches: 0,
     malformedLines: 0,
+    simulation: [],
   };
+  const sims = new Map<string, PolicyResult>();
   for (const s of sessions) {
     addUsage(usage, s.usage);
     addUsage(sidechainUsage, s.sidechainUsage);
@@ -127,6 +131,27 @@ export function aggregate(sessions: SessionAnalysis[], ttlMinutes: number): Aggr
     a.gapsOverHour += s.cache.gapsOverHour;
     a.modelSwitches += s.modelSwitches;
     a.malformedLines += s.malformedLines;
+    for (const r of s.simulation ?? []) {
+      const x = sims.get(r.policy) ?? {
+        ...r,
+        cost: 0,
+        actualCost: 0,
+        clears: 0,
+        compacts: 0,
+        idleClears: 0,
+        avgContext: 0,
+        turns: 0,
+      };
+      x.cost += r.cost;
+      x.actualCost += r.actualCost;
+      x.clears += r.clears;
+      x.compacts += r.compacts;
+      x.idleClears += r.idleClears;
+      x.turns += r.turns;
+      // Request-weighted mean context across sessions.
+      x.avgContext += r.avgContext * s.requests;
+      sims.set(r.policy, x);
+    }
   }
   const totalIn =
     usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
@@ -139,6 +164,10 @@ export function aggregate(sessions: SessionAnalysis[], ttlMinutes: number): Aggr
   a.repeatedReads = a.repeatedReads
     .sort((x, y) => y.duplicateCost - x.duplicateCost || y.reads - x.reads)
     .slice(0, 15);
+  a.simulation = [...sims.values()].map((x) => ({
+    ...x,
+    avgContext: a.requests ? x.avgContext / a.requests : 0,
+  }));
   return a;
 }
 

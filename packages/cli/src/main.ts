@@ -1,12 +1,18 @@
 import { runAnalyze } from './analyze.js';
 import { ArgError, parseAnalyzeArgs, USAGE } from './args.js';
+import { runConfig } from './config-cmd.js';
+import { runKeynotes } from './keynotes-cmd.js';
+import { parseSetupArgs, runSetupStatusline, SETUP_USAGE } from './setup-statusline.js';
 
 const HELP = `tokentrim — measure and cut wasted tokens in Claude Code sessions
 
 Commands:
   analyze     token report for past sessions (run "tokentrim analyze --help")
+  config      show module status, or turn a module on/off for a project
+  keynotes    refresh or show a session's keynotes (used by /tokentrim:checkpoint)
+  setup-statusline   add the TokenTrim meter to Claude Code's status line (asks first)
 
-More commands (audit, bench, setup-statusline, doctor) arrive in later phases.
+More commands (audit, bench, doctor) arrive in later phases.
 `;
 
 async function main(argv: string[]): Promise<number> {
@@ -32,6 +38,24 @@ async function main(argv: string[]): Promise<number> {
       }
       throw e;
     }
+  }
+  const io = {
+    log: (s: string) => process.stdout.write(s + '\n'),
+    progress: (s: string) => process.stderr.write(s + '\n'),
+  };
+  if (cmd === 'config') return runConfig(rest, io);
+  if (cmd === 'keynotes') return runKeynotes(rest, io);
+  if (cmd === 'setup-statusline') {
+    if (rest.includes('--help')) {
+      process.stdout.write(SETUP_USAGE);
+      return 0;
+    }
+    const o = parseSetupArgs(rest);
+    if (typeof o === 'string') {
+      process.stderr.write(o);
+      return 2;
+    }
+    return runSetupStatusline(o, io);
   }
   process.stderr.write(`Unknown command "${cmd}".\n\n${HELP}`);
   return 2;

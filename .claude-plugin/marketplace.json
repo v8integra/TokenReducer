@@ -1,0 +1,12 @@
+{
+  "name": "tokentrim-dev",
+  "owner": { "name": "TokenTrim contributors" },
+  "description": "Local development build of TokenTrim. Run npm run build after changes; plugins from a local marketplace load in place.",
+  "plugins": [
+    {
+      "name": "tokentrim",
+      "source": "./packages/plugin-claude-code",
+      "description": "Measures where tokens go, shows a status line meter, and keeps keynotes across /clear."
+    }
+  ]
+}

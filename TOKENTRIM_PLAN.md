@@ -97,8 +97,8 @@ tokentrim/
 All modules are **on by default**. Each one can be turned off in config (§7) or with `/tokentrim:tokentrim off <module>`.
 
 ### 5.1 `meter` — status line
-- Shows: context tokens and %, estimated session cost (ratio units, or $ if absolute pricing is configured), cache hit ratio, and **turns until a clear pays off** (§6).
-- Color bands: green / yellow / red, with configurable thresholds and defaults based on §6.
+- Shows: context tokens and %, estimated session cost (ratio units, or $ if absolute pricing is configured), cache hit ratio, **turns until a clear pays off** (§6), and the **cost of the next request** (≈ `r_read × C`). On a 1M window, 45% full already means ~450K tokens re-read per request, so the bands key off absolute context against `advisor.context_budget` and break-even, never window % alone.
+- Color bands: green / yellow / red, with configurable thresholds and defaults based on §6 and the context budget.
 - At red, the text includes the recommended action, e.g. `⚠ 142K · clear pays off in ~3 turns · /tokentrim:checkpoint then /clear`.
 - Data source: the `Stop` hook writes `.tokentrim/state/<session>.json`, and the status line script reads it plus its own stdin JSON. The status line script must be fast (<50 ms) and must never throw.
 - If a plugin can't register a status line: `tokentrim setup-statusline` adds it to the user's settings **only after asking**, backs up the file, and **chains** any existing status line command instead of replacing it.
@@ -118,23 +118,29 @@ All modules are **on by default**. Each one can be turned off in config (§7) or
 - **Never inject on every turn.** Per-turn injection stays in the history and compounds.
 
 ### 5.3 `advisor` — notices and recommendations
+The baseline (docs/BASELINE.md) shows that **average context size is the cost**: 77% of spend is cache reads of a ~458K average context, because 1M-window sessions run to ~965K before auto-compacting. The advisor's job is to keep the average context small, at **every** task boundary, not once per session.
+
 - Runs in `Stop` after metrics update. Uses §6 to decide when to recommend:
-  - `/tokentrim:checkpoint` → `/clear` when break-even ≤ `advisor.max_breakeven_turns` (default 4) **and** a task boundary is detected (to-do list all completed, a `git commit` succeeded, tests passed after failures, or the user's last message reads as a wrap-up).
-  - `/compact <focus>` when context is high but the user is mid-task (no boundary detected).
-  - Disabling unused MCP servers via `/mcp` when the audit shows MCP schema overhead above a threshold and those tools haven't been used this session.
+  - `/tokentrim:checkpoint` → `/clear` when break-even ≤ `advisor.max_breakeven_turns` (default 4) **and** a task boundary is detected (to-do list all completed, a `git commit` succeeded, tests passed after failures, or the user's last message reads as a wrap-up). Re-arms after every clear, so a long working day gets a recommendation at each boundary.
+  - `/compact <focus>` when context passes `advisor.context_budget` (default 200K, tuned by the policy simulation in Phase 2) and the user is mid-task (no boundary detected). This replaces waiting for auto-compact near the window limit.
   - `/model` (switching to a cheaper model) **only** suggested right after a clear, because switching mid-session breaks the cache.
+  - MCP/skill overhead recommendations move to the audit (§5.6), which runs between sessions.
 - **Delivery:** `systemMessage` to the user, **once per threshold band crossing** (state tracked per session). Optionally (`advisor.tell_claude`, default true), also a one-time `additionalContext` line asking Claude to mention the recommendation in one sentence at the end of its reply.
-- **Idle/cache-expiry check** (`UserPromptSubmit`): if time since the last `Stop` exceeds `cache_ttl_minutes` (default 5) and context is above `idle.min_context` (default 40K), show a notice that clearing first is cheaper. With `idle.block_once: true` (default **false**), block that prompt once with exit code 2 and a clear message. Re-sending the same prompt goes through.
+- **Idle/cache-expiry check** (`UserPromptSubmit`): if time since the last `Stop` exceeds the cache TTL and context is above `idle.min_context` (default 40K), show a notice with both costs (`r_write × C` to continue vs. §6 one-time cost to clear). In the baseline, 46 of 47 cache rebuilds came after an idle gap and cost 6.1% extra. With `idle.block_once: true` (default **false**), block that prompt once with exit code 2 and a clear message. Re-sending the same prompt goes through.
+- **Cache TTL is detected, not assumed.** `idle.cache_ttl_minutes` defaults to `"auto"`: the hook looks at the session's own history (idle gaps followed or not followed by a rebuild, §5.7) and uses 60 minutes when gaps over 5 minutes didn't rebuild, else 5. The baseline sessions use a 1-hour TTL; a fixed 5-minute default could have fired up to ~280 false notices (one per idle gap over 5 minutes).
 - **Optional desktop notification** (`advisor.desktop_notify`, default false): native toast on Windows/macOS/Linux. Must be a lazy-loaded optional dependency that fails silently.
 
 ### 5.4 `guards` — waste prevention (PreToolUse)
 Each guard is a pure function in `core/guards`. The hook wrapper handles state and I/O.
 
-- **Duplicate read** (`Read`): if the same path and same range was read this session, the file hash hasn't changed, and no clear/compact has happened since, deny with the reason: *"Unchanged since you read it earlier in this session; its content is already in context above."* The registry resets on `SessionStart` (clear/compact) and on any Edit/Write to that file (tracked in `PostToolUse`).
-- **Large file** (`Read` with no offset/limit): if the file is over `guards.large_file_lines` (default 800), **deny once per file per session**, suggesting `outline` / `read_symbol` or an offset/limit range. A second attempt is allowed, so Claude can always get the file if it needs it.
-- **Noisy commands** (`Bash`): a pattern list (full test suites with no filter, `npm install` / `pnpm install` without quiet flags, recursive `ls`/`find`/`tree` on the repo root, `cat` of large files, `git log` without `-n`). **Deny once** with a suggested quieter command. The pattern list is configurable.
-- **Never** guard `Edit`, `Write`, `MultiEdit` or anything destructive. The guards only reduce reads and output.
-- Track guard hits and estimated tokens saved in session state for the analyzer and the README numbers. A false-positive denial wastes a round trip, so that's tracked too.
+**Scope cut after the baseline.** Simulated on 7,497 real requests, the original three guards would have saved 0.5% in total: Claude Code already returns a stub for unchanged re-reads (duplicate reads: 0.2%) and caps large reads (large-file guard: 0 hits). Only the noisy-command guard showed up (0.3%, mostly `cat` of files). The guards ship small and off-by-default where they don't earn their keep:
+
+- **Noisy commands** (`Bash`, on by default): `cat`/`type`/`Get-Content` of whole files, recursive `ls`/`find`/`tree` without a depth limit, `git log` without `-n`, unfiltered full test suites, installs without quiet flags. Patterns live in `core/guards/noisy.ts` (already shared with the analyzer). **Deny once** per command pattern per session, suggesting the quieter form. Commands already piped through `head`/`tail`/`grep`/`wc` are never denied.
+- **Duplicate read** (`Read`, default **off**): kept as a fallback for Claude Code versions without built-in read dedup. Same rules as before (same path + range, unchanged hash, no clear/compact since).
+- **Large file**: dropped. Revisit only if a future Claude Code version stops capping reads.
+- **Large Write bodies** (measure first, no guard yet): tool-call inputs are 16.3% of baseline cost, because every `Write`/`Edit` body stays in context for the rest of the segment. The analyzer reports how much of that is `Write` over an *existing* file (where an `Edit` would carry far less). A guard is only built in a later phase if that slice is material, and even then it suggests rather than blocks.
+- **Never** block `Edit`, `Write`, `MultiEdit` or anything destructive.
+- Track guard hits, estimated tokens saved and false positives (a denial followed by the same command) in session state, so the analyzer reports real numbers instead of the simulation.
 
 ### 5.5 `nav` — lazy code navigation (MCP server)
 - Tools (each kept to a short, tight schema to minimize MCP overhead):
@@ -230,13 +236,13 @@ Files, merged in order (later wins):
   "checkpoint": { "max_tokens": 1500, "inject_on_startup": false },
   "advisor": {
     "max_breakeven_turns": 4,
+    "context_budget": 200000,
     "tell_claude": true,
     "desktop_notify": false
   },
-  "idle": { "cache_ttl_minutes": 5, "min_context": 40000, "block_once": false },
+  "idle": { "cache_ttl_minutes": "auto", "min_context": 40000, "block_once": false },
   "guards": {
-    "duplicate_read": true,
-    "large_file_lines": 800,
+    "duplicate_read": false,
     "noisy_commands": true,
     "noisy_patterns_extra": []
   },
@@ -266,11 +272,11 @@ Files, merged in order (later wins):
 | Event | Matcher | Module(s) | Action |
 |---|---|---|---|
 | SessionStart | startup/resume/clear/compact | checkpoint, guards | inject keynotes (once); reset read registry on clear/compact |
-| UserPromptSubmit | — | advisor (idle) | cache-expiry notice / optional block-once |
-| PreToolUse | Read | guards | duplicate-read, large-file |
+| UserPromptSubmit | — | advisor (idle) | cache-expiry notice (auto-detected TTL) / optional block-once |
 | PreToolUse | Bash | guards | noisy-command |
-| PostToolUse | Read/Edit/Write/MultiEdit | guards | update registry and hashes |
-| Stop | — | meter, checkpoint, advisor | update metrics state, Facts, recommendations |
+| PreToolUse | Read | guards | duplicate-read (only when enabled) |
+| PostToolUse | Read/Edit/Write/MultiEdit | guards, checkpoint | update registry and hashes; record edited files for Facts |
+| Stop | — | meter, checkpoint, advisor | update metrics state, Facts, boundary detection, recommendations |
 | PreCompact | manual/auto | checkpoint | refresh Facts before compaction |
 | SessionEnd | clear/other | checkpoint | final refresh + archive |
 
@@ -289,18 +295,31 @@ Each phase ends with passing tests on all 3 OSes and a short entry in `CHANGELOG
 - `tokentrim analyze` with Markdown + HTML output.
 - Milestone: run it on your own past sessions and save the baseline numbers.
 
-**Phase 2 — Plugin: meter, checkpoint, advisor**
-- Plugin manifest, hooks.json, bundled hooks, `/tokentrim:checkpoint`, `/tokentrim:tokentrim on|off|status`.
-- Status line (or `setup-statusline` fallback), threshold notices, idle check.
+**Phase 2 — Context control: policy simulation, meter, checkpoint, advisor** (the main lever; see docs/BASELINE.md)
+- **2a. Policy simulation first (CLI only, no hooks).** Extend `tokentrim analyze --simulate` to replay each recorded session under candidate policies and estimate savings before any hook exists:
+  - *boundary clears*: clear at every detected task boundary where break-even ≤ N (re-arming after each clear; after a clear, context is modelled as `S + growth since the clear`);
+  - *context budget*: compact or clear when context passes B ∈ {150K, 200K, 300K, 400K};
+  - *idle clears*: clear instead of continuing after an idle gap past the detected TTL.
+  Report savings per policy and per project, plus how often each would have interrupted the user. The defaults for `max_breakeven_turns`, `context_budget` and the idle notice come from this table, recorded in `docs/DECISIONS.md`.
+- **2b. Boundary detection in `core`:** to-do list all completed, successful `git commit`, tests passing after failures, wrap-up wording. Unit-tested on synthetic transcripts and checked by hand against 3 real sessions.
+- **2c. Plugin:** manifest, hooks.json, bundled hooks, `/tokentrim:checkpoint`, `/tokentrim:tokentrim on|off|status`. Settle open questions 1–3 and 5 (§13) first.
+- **2d. Meter:** status line (or `setup-statusline` fallback) with context, next-request cost, break-even and budget band.
+- **2e. Keynotes:** Facts kept small so the fresh-start size `S` stays low (files edited, open errors, to-dos, last requests); Summary via `/tokentrim:checkpoint`; inject once on `clear`/`compact`/`resume`.
+- **2f. Advisor:** boundary-clear and budget-compact recommendations (re-arming), idle notice with auto-detected TTL.
 - Local install instructions for testing (`/plugin install ./packages/plugin-claude-code`, `/reload-plugins`).
-- Milestone: a full session where keynotes survive `/clear` and the advisor fires at the right moment.
+- **Milestones:**
+  1. The simulation shows a policy worth ≥ 20% of baseline cost on the 13-project set (if no policy reaches that, record why and adjust targets before building 2c–2f).
+  2. A full real session where keynotes survive `/clear`, the advisor fires at each task boundary, and no idle notice fires on a 1-hour-TTL session before 60 minutes.
+  3. Re-running the analyzer on two weeks of sessions with the plugin on shows lower average context per request than the baseline's ~458K.
 
-**Phase 3 — Guards**
-- Duplicate-read, large-file, noisy-command, with savings tracking.
-- Milestone: analyzer shows guard savings, with false-positive rate under 5% on your own sessions.
+**Phase 3 — Fixed-overhead audit and targeted guards**
+Fixed overhead (system prompt, tool and MCP schemas, skills, memory files) was ~56K tokens on every request, 10.8% of baseline cost, so the audit moves ahead of the guards and absorbs the old Phase 4.
+- **Audit** (`tokentrim audit` and `/tokentrim:tokentrim audit`, read-only, §5.6): estimated per-request tokens of each CLAUDE.md/memory file, MCP server schemas, skill listings and deferred-tool lists; servers and skills unused across recent sessions (from the analyzer's tool stats); cache breakers seen in transcripts (model switches, rebuilds without an idle gap). Each item gets a saving in ITE over the analyzed period and a suggested fix.
+- **Guards** (§5.4 as revised): noisy-command guard on by default; duplicate-read guard off by default; no large-file guard. Real hit, saving and false-positive tracking in session state.
+- **Write-vs-Edit measurement** in the analyzer: share of tool-call-input cost from `Write` over existing files. Decide in `docs/DECISIONS.md` whether a suggestion is worth building.
+- **Milestones:** the audit lists at least the top 3 overhead items on the author's setup with estimated savings; noisy-command guard false-positive rate under 5% over a week of real use.
 
-**Phase 4 — Audit**
-- `tokentrim audit` and the in-session command.
+**Phase 4 — Folded into Phase 3** (the audit). Numbering kept so later references stay valid.
 
 **Phase 5 — Nav MCP**
 - web-tree-sitter grammars, four tools, lazy hash-keyed cache, small instruction snippet.
@@ -349,3 +368,15 @@ Each phase ends with passing tests on all 3 OSes and a short entry in `CHANGELOG
 4. Do plugin MCP tools need per-tool approval? Document the one-time "always allow" step if they do.
 5. Does `PostCompact` exist in the current version, and does it expose the compact summary? (It could improve keynotes.)
 6. Plugin command naming: `commands/` vs `skills/` in the current plugin spec.
+7. Does the status line or hook input expose the cache TTL in use? If so, prefer it over `"auto"` detection.
+8. Can a hook see the to-do list state directly, or only through the transcript? (Affects boundary detection cost.)
+
+---
+
+## 14. Revision log
+
+- **2026-11-03 — Phases 2–4 revised after the Phase 1 baseline** (docs/BASELINE.md). Findings: 77% of cost is cache reads of a ~458K average context; simulated guards save 0.5%; idle rebuilds cost 6.1% and sessions use a 1-hour TTL; fixed overhead is 10.8%. Changes: Phase 2 starts with a policy simulation and targets average context (re-arming boundary clears, a context budget, auto-detected TTL); guards cut to noisy commands (duplicate-read off, large-file dropped, Write-vs-Edit measured first); the audit moves into Phase 3 and Phase 4 is folded. Not yet re-evaluated: Phase 5 (nav MCP), since `Read` results were only 5.7% of baseline cost and its schemas add fixed overhead; revisit after Phase 3's audit numbers.
+- **2026-11-03 — Phase 2a done.** `analyze --simulate` built; milestone 1 met (strong boundary clears alone ≈ 32%, strong + idle + 200K budget ≈ 58% on the 13-project set). Defaults recorded in docs/DECISIONS.md D12: strong signals only by default (`advisor.boundary_signals: "strong" | "any"`), idle notice on, `context_budget` 200K, skip budget suggestions with a long break-even.
+- **2026-11-03 — Phase 2c done.** Open questions 1, 2, 3, 5 and 6 answered (docs/DECISIONS.md D13): no plugin status line (setup-statusline stays), plugin commands are skills with `disable-model-invocation: true`, SessionStart now reports cache expiry itself (2f should use it). Plugin skeleton, fail-open runtime, incremental Stop metrics and `/tokentrim:tokentrim` built; `/tokentrim:checkpoint` moved to 2e.
+- **2026-11-03 — Phase 2d done.** Meter, `tokentrim setup-statusline` (asks, backs up, chains, `--remove`) and `/tokentrim:setup-statusline`. The status line input reports the cache TTL, so `idle.cache_ttl_minutes: "auto"` is dropped. The <50 ms target is revised to ≤40 ms over Node start-up (D15).
+- **2026-11-03 — Phase 2e done.** Keynotes Facts, size cap, `/tokentrim:checkpoint`, injection after clear/compact (not resume: the conversation is restored there). Per-session keynotes plus a clear pointer link the old and new session (D16).

@@ -4,6 +4,8 @@
  */
 /** Number fields whose default is null (meaning "not configured"). */
 const NULLABLE = new Set(['pricing.usd_per_mtok_input']);
+/** String fields that only accept these values. */
+const ENUMS: Record<string, readonly string[]> = { 'advisor.boundary_signals': ['strong', 'any'] };
 
 export function mergeLayer<T>(base: T, layer: unknown, source: string, warnings: string[]): T {
   if (layer === undefined) return base;
@@ -43,6 +45,10 @@ function mergeObject(
     } else if (typeof current === 'number') {
       if (isFiniteNumber(value) && value >= 0) out[key] = value;
       else warnings.push(`${source}: "${where}" should be a non-negative number; ignored`);
+    } else if (ENUMS[where]) {
+      if (typeof value === 'string' && ENUMS[where].includes(value)) out[key] = value;
+      else
+        warnings.push(`${source}: "${where}" should be one of ${ENUMS[where].join(', ')}; ignored`);
     } else if (typeof value === typeof current) {
       out[key] = value;
     } else {

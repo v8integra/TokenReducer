@@ -30,6 +30,8 @@
       "additionalProperties": false,
       "properties": {
         "max_breakeven_turns": { "type": "number", "minimum": 0, "default": 4 },
+        "context_budget": { "type": "number", "minimum": 0, "default": 200000 },
+        "boundary_signals": { "enum": ["strong", "any"], "default": "strong" },
         "tell_claude": { "type": "boolean", "default": true },
         "desktop_notify": { "type": "boolean", "default": false }
       }

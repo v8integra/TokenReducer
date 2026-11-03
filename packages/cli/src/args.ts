@@ -17,12 +17,21 @@ export interface AnalyzeArgs {
   redact: boolean;
   /** Analyze each target project separately and write one report per target. */
   byTarget: boolean;
+  /** Replay sessions under candidate context policies. */
+  simulate: boolean;
 }
 
 export class ArgError extends Error {}
 
 export function parseAnalyzeArgs(argv: string[]): AnalyzeArgs {
-  const a: AnalyzeArgs = { sessions: [], html: false, json: false, redact: false, byTarget: false };
+  const a: AnalyzeArgs = {
+    sessions: [],
+    html: false,
+    json: false,
+    redact: false,
+    byTarget: false,
+    simulate: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]!;
     const value = () => {
@@ -64,6 +73,9 @@ export function parseAnalyzeArgs(argv: string[]): AnalyzeArgs {
       case '--redact':
         a.redact = true;
         break;
+      case '--simulate':
+        a.simulate = true;
+        break;
       case '--by-target':
         a.byTarget = true;
         break;
@@ -98,6 +110,7 @@ Reads Claude Code transcripts locally and writes a token report. Nothing leaves 
   --until <date>        sessions that started on or before this date
   --target <name>       only sessions that mostly worked in this project folder
   --by-target           one report per target project, plus an index
+  --simulate            estimate savings of clear/compact policies on these sessions
   --out <dir>           where to write reports (default: <project>/.tokentrim/reports)
   --html                also write a self-contained HTML report with charts
   --json                also write the raw analysis as JSON
